@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>归化—异化翻译策略光谱 · 课件预览</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"></script>
+  <script src="https://unpkg.com/lucide-react@0.344.0/dist/umd/lucide-react.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12/umd/Recharts.js"></script>
+  <style>
+    /* Custom scrollbar for dark theme */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    
+    /* Smooth transitions */
+    * { transition-property: background-color, border-color, color, fill, stroke, box-shadow; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 200ms; }
+
+    .slider-track {
+      background: linear-gradient(to right, #ea580c, #f59e0b, #8b5cf6, #22d3ee);
+    }
+
+    .gradient-text {
+      background: linear-gradient(to right, #fb923c, #a78bfa, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useCallback } = React;
+    const { motion, AnimatePresence } = window["framer-motion"] || { motion: { div: 'div', header: 'header' }, AnimatePresence: ({children}) => children };
+
+    // ─── Icon Components (SVG fallbacks) ─────────────────────────────
+    const Icon = ({ d, size = 20, className = "" }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d={d} />
+      </svg>
+    );
+
+    const Icons = {
+      languages: "M5 8l6 6M4 14l6-6 2 3 4-6M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6",
+      globe: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z",
+      bookOpen: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z",
+      scale: "M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1zM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1zM12 22V2",
+      chevronDown: "m6 9 6 6 6-6",
+      lightbulb: "M9 18h6M10 22h4M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14",
+      target: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4z",
+      trendingUp: "M23 6l-9.5 9.5-5-5L1 18",
+      info: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 16v-4M12 8h.01",
+      sparkles: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
+      palette: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 2a4 4 0 0 1 0 8 4 4 0 0 0-4 4 4 4 0 0 1-4 0",
+      slidersHorizontal: "M21 9H3M17 5H7M19 13H5M17 17H7M21 3H3",
+      arrowRight: "M5 12h14M12 5l7 7-7 7",
+    };
+
+    // ─── Data ───────────────────────────────────────────────────────
+    const DEFAULT_TERMS = [
+      {
+        id: 'jianghu', chinese: '江湖', pinyin: 'jiānghú',
+        description: '中国武侠文化中的核心概念，指代一个游离于朝廷法律之外的、由侠客、武林人士、江湖儿女构成的独特社会空间与价值体系。',
+        category: '武侠文化',
+        levels: [
+          { level: 0, label: '完全归化', english: 'the world of martial arts',
+            strategyName: '完全归化 (Full Domestication)',
+            venutiPoints: ['采用目标语读者完全熟悉的文化意象','消除源语文化异质性，追求"透明"翻译','Venuti 称之为"流畅翻译"(fluent translation)','读者几乎感受不到这是翻译文本','符合 Nida 的"动态对等"理论'],
+            contextUsage: '面向普通英语大众读者的通俗小说、影视字幕、儿童读物；当"江湖"仅作为背景设定而非核心主题时。',
+            pros: ['可读性极高','无理解门槛','符合目标语习惯'], cons: ['丢失文化深度','概念被简化','无法传递原作韵味'] },
+          { level: 1, label: '偏归化', english: 'the martial arts community',
+            strategyName: '偏归化 (Moderate Domestication)',
+            venutiPoints: ['保留部分源语语义，但用目标语框架重组','"community"一词将江湖纳入西方社会学术语体系','属于 Venuti 定义的"归化主导策略"','在可读性与文化保留之间取折中','适合中等文化背景的读者群体'],
+            contextUsage: '学术性介绍文章、文化普及类出版物、面向有一定中国认知的英语读者群的中级读物。',
+            pros: ['兼顾可读性与准确性','读者易产生联想','结构清晰'], cons: ['仍存在概念偏差','削弱了江湖的神秘感','社区感≠江湖感'] },
+          { level: 2, label: '中间', english: 'the jianghu (martial world)',
+            strategyName: '中间路线 (Middle Ground / Hybrid)',
+            venutiPoints: ['音译+括号注释的混合策略','Venuti 提倡的"显性翻译"(foreignizing with explanation)','既引入异质元素，又提供理解支架','体现 Lawrence Venuti 的"抵抗式翻译"理念雏形','在教学场景中尤为常见'],
+            contextUsage: '大学翻译教材、学术论文、文化研究著作、需要兼顾专业性与通俗性的场合。',
+            pros: ['文化标记明确','教学价值高','平衡性好'], cons: ['阅读流畅度下降','注释可能打断叙事节奏'] },
+          { level: 3, label: '偏异化', english: 'the jianghu, a world of wandering heroes',
+            strategyName: '偏异化 (Moderate Foreignization)',
+            venutiPoints: ['保留音译并附加描述性解释','Venuti 鼓励的"异化翻译"实践——让源语文化凸显','强迫读者面对文化差异，而非将其平滑抹去','描述性同位语提供语境但不替代原词','彰显译者主体性与文化立场'],
+            contextUsage: '文学翻译（尤其是武侠小说全译本）、深度文化评论、面向高阶读者的精品出版。',
+            pros: ['文化保真度高','激发读者好奇心','保留审美张力'], cons: ['阅读门槛较高','篇幅增加','需读者配合'] },
+          { level: 4, label: '完全异化', english: 'jianghu',
+            strategyName: '完全异化 (Full Foreignization)',
+            venutiPoints: ['直接音译，不加任何注释或解释','Venuti 理论的极端实践——最大程度保留他者性','相信读者有能力在语境中自行构建意义','类似 "zen", "kung fu", "tao" 的成功先例','挑战目标语文化的语言边界'],
+            contextUsage: '专业学术圈、长期连载的系列翻译（首现时已做铺垫）、面向熟谙中国文化的精英读者群。',
+            pros: ['文化完整性最高','简洁有力','有望进入英语词汇'], cons: ['初期理解困难','依赖上下文','风险较高'] },
+        ],
+      },
+      {
+        id: 'shanghuo', chinese: '上火', pinyin: 'shànghuǒ',
+        description: '中医学概念，指人体阴阳失衡、内热偏盛的状态，表现为咽喉肿痛、牙龈发炎、便秘等症状，深深嵌入中国人的日常生活话语体系中。',
+        category: '中医文化',
+        levels: [
+          { level: 0, label: '完全归化', english: 'inflammation',
+            strategyName: '完全归化 (Full Domestication)',
+            venutiPoints: ['用西医术语"inflammation"对应中医概念','完全纳入目标语的医学话语体系','属于典型的"文化过滤"(cultural filtering)','Venuti 批评此类做法抹杀了中医的世界观','实用主义导向的功能性翻译'],
+            contextUsage: '西医背景的健康科普、面向海外患者的医疗说明、跨医学体系的初级交流场景。',
+            pros: ['医学沟通高效','无认知障碍','临床实用'], cons: ['理论体系错位','丢失整体观','误导性等值'] },
+          { level: 1, label: '偏归化', english: 'internal heat condition',
+            strategyName: '偏归化 (Moderate Domestication)',
+            venutiPoints: ['使用描述性短语传达核心含义','"internal heat"是中医概念的意译尝试','保留了部分源语逻辑，但用英语表达','Venuti 会归类为"温和归化"','是跨文化医学交流中的常用折中方案'],
+            contextUsage: '中西医结合的学术讨论、中医药国际化推广材料、面向有基本健康素养的大众媒体。',
+            pros: ['语义较准确','易于理解','保留一定理论色彩'], cons: ['仍是简化表达','缺乏文化厚度','可能引发误读'] },
+          { level: 2, label: '中间', english: 'shanghuo (excess internal heat)',
+            strategyName: '中间路线 (Middle Ground / Hybrid)',
+            venutiPoints: ['音译加括号注释的标准学术格式','Venuti 支持的在异化与可读性之间的平衡','为术语建立独立身份，同时提供入口','类似 "qi (life energy)" 的处理方式','适合作为术语首次引入时的策略'],
+            contextUsage: '中医英译教材、学术论文、WHO 传统医学术语标准文件、双语健康类出版物。',
+            pros: ['术语标准化','教学友好','兼顾双方需求'], cons: ['略显繁琐','重复出现时冗余'] },
+          { level: 3, label: '偏异化', english: 'shanghuo — when your body\'s internal fire flares up',
+            strategyName: '偏异化 (Moderate Foreignization)',
+            venutiPoints: ['音译加富有诗意的描述性解释','用隐喻性语言("internal fire")呼应中医思维','Venuti 赞赏的让源语文化发声的策略','描述本身带有文化色彩，而非中性转述','邀请读者体验另一种身体认知方式'],
+            contextUsage: '中医文化散文、文学作品中涉及中医的段落、面向人文学科读者的文化读本。',
+            pros: ['文化氛围浓郁','审美价值高','启发式强'], cons: ['不够精确','不适合技术文档','主观性强'] },
+          { level: 4, label: '完全异化', english: 'shanghuo',
+            strategyName: '完全异化 (Full Foreignization)',
+            venutiPoints: ['直接以拼音形式进入译文','假设读者通过语境或前文获得理解','Venuti 理想中的"抵抗式翻译"——不妥协','类似 "sushi", "kimchi" 的文化词输出路径','挑战英语对"健康/疾病"的话语垄断'],
+            contextUsage: '深度中国文化题材作品、长期追踪中医的专题报道、面向汉学圈的学术写作。',
+            pros: ['文化主权完整','简洁优雅','具备词汇化潜力'], cons: ['入门门槛极高','严重依赖语境','接受度不确定'] },
+        ],
+      },
+      {
+        id: 'guanxi', chinese: '关系', pinyin: 'guānxì',
+        description: '中国社会中基于血缘、地缘、业缘等纽带形成的人际网络与互惠交换体系，是社会运作的核心机制，远超英文 "relationship" 的内涵。',
+        category: '社会文化',
+        levels: [
+          { level: 0, label: '完全归化', english: 'connections / networking',
+            strategyName: '完全归化 (Full Domestication)',
+            venutiPoints: ['用西方熟悉的"社交网络"概念替换','将复杂的社会嵌入性关系简化为人际技巧','Venuti 指责这种做法使源语文化变得"平庸"','符合商业与管理话语的需求','牺牲文化特异性换取功能性理解'],
+            contextUsage: '商业管理类畅销书、跨国公司培训材料、大众媒体报道中的简明解释。',
+            pros: ['即学即用','无文化壁垒','商业场景适配'], cons: ['严重窄化概念','丢失伦理维度','强化刻板印象'] },
+          { level: 1, label: '偏归化', english: 'personal relationships & social networks',
+            strategyName: '偏归化 (Moderate Domestication)',
+            venutiPoints: ['扩展为短语以覆盖更多语义维度','试图同时捕捉私人层面与社会层面','仍停留在西方社会学框架内解释','Venuti 归类为"有意识的归化选择"','在社会学/人类学普及读物中常见'],
+            contextUsage: '社会科学普及读物、中国概况课程教材、面向本科生的区域研究资料。',
+            pros: ['多维度呈现','相对全面','学术上可接受'], cons: ['仍是外部视角','拆解了有机整体','缺乏本土话语权'] },
+          { level: 2, label: '中间', english: 'guanxi (personal connections / social capital)',
+            strategyName: '中间路线 (Middle Ground / Hybrid)',
+            venutiPoints: ['音译加多义注释的复合方案','引入社会资本理论作为桥梁概念','Venuti 认可的学术性异化策略','在保留术语的同时提供多元参照','是目前学术界最广泛接受的方案'],
+            contextUsage: '社会学/政治学学术论文、中国研究专著、高校课程阅读材料、政策研究报告。',
+            pros: ['学术规范性','参照丰富','认可度最高'], cons: ['注释负担重','不同领域偏好不同释义'] },
+          { level: 3, label: '偏异化', english: 'guanxi — the intricate web of reciprocal obligations',
+            strategyName: '偏异化 (Moderate Foreignization)',
+            venutiPoints: ['音译加富含文化内涵的长描述','"reciprocal obligations"直击关系的核心机制','描述本身承载了文化价值观（义务、互惠）','Venuti 推崇的让源语文化逻辑显现的方式','引导读者从内部理解而非从外部观察'],
+            contextUsage: '人类学民族志、深度中国报道、文学作品中的文化描写、高端商业情报分析。',
+            pros: ['文化洞察深','叙事张力强','尊重源语视角'], cons: ['信息密度大','需要耐心阅读','不够"好用"'] },
+          { level: 4, label: '完全异化', english: 'guanxi',
+            strategyName: '完全异化 (Full Foreignization)',
+            venutiPoints: ['无条件音译，零修饰','Venuti 的终极异化立场——信任文本与文化语境','已在英语学术界获得准术语地位','代表中国文化概念成功输出的范例','挑战西方中心的社会科学话语体系'],
+            contextUsage: '顶级学术期刊论文、中国研究专著、长期关注中国的资深记者写作、专业咨询服务文档。',
+            pros: ['概念纯粹性','已被广泛接受','文化自信的象征'], cons: ['新读者困惑','过度使用可能导致空泛化'] },
+        ],
+      },
+    ];
+
+    const LEVEL_LABELS = ['完全归化', '偏归化', '中间', '偏异化', '完全异化'];
+
+    function getGradientColor(level) {
+      if (level <= 0) return { bg: 'bg-orange-900', text: 'text-orange-300', border: 'border-orange-500', glow: 'shadow-orange-500/30', solid: '#f97316' };
+      if (level === 1) return { bg: 'bg-amber-900', text: 'text-amber-300', border: 'border-amber-500', glow: 'shadow-amber-500/30', solid: '#f59e0b' };
+      if (level === 2) return { bg: 'bg-violet-900', text: 'text-violet-300', border: 'border-violet-500', glow: 'shadow-violet-500/30', solid: '#8b5cf6' };
+      if (level === 3) return { bg: 'bg-indigo-900', text: 'text-indigo-300', border: 'border-indigo-500', glow: 'shadow-indigo-500/30', solid: '#6366f1' };
+      return { bg: 'bg-cyan-950', text: 'text-cyan-300', border: 'border-cyan-400', glow: 'shadow-cyan-400/30', solid: '#22d3ee' };
+    }
+
+    // ─── Sub-Components ──────────────────────────────────────────────
+    function Toolbar({ selectedTermId, onTermChange, terms }) {
+      const [dropdownOpen, setDropdownOpen] = useState(false);
+      const currentTerm = terms.find(t => t.id === selectedTermId) || terms[0];
+
+      return (
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 shadow-lg shadow-violet-500/20">
+              <Icon d={Icons.languages} size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-100 tracking-tight">归化—异化翻译策略光谱</h1>
+              <p className="text-xs text-slate-400 hidden sm:block">Domestication – Foreignization Strategy Spectrum · Venuti 理论互动演示</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative">
+              <button onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-700 text-sm text-slate-200 hover:bg-slate-700 min-w-[160px] justify-between">
+                <Icon d={Icons.globe} size={16} className="text-cyan-400" />
+                <span className="font-mono truncate">{currentTerm.chinese}</span>
+                <Icon d={Icons.chevronDown} size={16} className={`text-slate-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-full rounded-lg bg-slate-800 border border-slate-700 shadow-xl shadow-black/40 z-50 overflow-hidden">
+                  {terms.map(term => (
+                    <button key={term.id} onClick={() => { onTermChange(term.id); setDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-2.5 text-sm hover:bg-slate-700 flex items-center justify-between ${term.id === selectedTermId ? 'bg-slate-700/60 text-cyan-300' : 'text-slate-300'}`}>
+                      <span><span className="font-mono font-bold">{term.chinese}</span><span className="text-slate-500 ml-2">{term.pinyin}</span></span>
+                      {term.id === selectedTermId && <Icon d={Icons.sparkles} size={14} className="text-cyan-400" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50">
+              <Icon d={Icons.palette} size={14} className="text-orange-400" />
+              <span className="text-xs text-slate-400">暖色=归化</span>
+              <div className="w-8 h-1 rounded-full slider-track" />
+              <span className="text-xs text-slate-400">冷色=异化</span>
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    function SpectrumSlider({ level, onLevelChange }) {
+      return (
+        <div className="w-full px-4 sm:px-8 py-6">
+          <div className="relative mb-4">
+            <div className="h-3 rounded-full slider-track shadow-inner" />
+            <div className="absolute top-0 left-0 right-0 flex justify-between px-1 pointer-events-none">
+              {[0,1,2,3,4].map(i => (
+                <div key={i} style={{ left: `${i*25}%`, position: 'absolute', transform: 'translateX(-50%)' }} className="flex flex-col items-center">
+                  <div className="w-1 h-4 bg-slate-950 rounded-full mt-3" />
+                  <span className="text-[10px] font-mono text-slate-400 mt-1 whitespace-nowrap">{LEVEL_LABELS[i]}</span>
+                </div>
+              ))}
+            </div>
+            {/* Thumb */}
+            <input type="range" min="0" max="4" value={level}
+              onChange={e => onLevelChange(Number(e.target.value))}
+              className="absolute top-0 left-0 w-full h-3 opacity-0 cursor-pointer z-20"
+              style={{ margin: 0 }} />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full z-10 pointer-events-none"
+              style={{ left: `calc(${level * 25}% - 14px)`,
+                background: `linear-gradient(135deg, ${getGradientColor(level).solid}, ${getGradientColor(Math.min(4, level + 1)).solid})`,
+                boxShadow: `0 0 20px ${getGradientColor(level).solid}66` }}>
+              <div className="absolute inset-0 rounded-full ring-2 ring-white/30 ring-inset" />
+              <Icon d={Icons.slidersHorizontal} size={14} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white drop-shadow" />
+            </div>
+          </div>
+          <div className="flex justify-between gap-1.5 mt-6">
+            {[0,1,2,3,4].map(i => (
+              <button key={i} onClick={() => onLevelChange(i)}
+                className={`flex-1 py-1.5 rounded-md text-xs font-mono font-medium transition-all ${i === level ? 'bg-slate-100 text-slate-950 shadow-lg' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border border-slate-700/30'}`}>
+                L{i+1}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function MainDisplay({ term, level }) {
+      const currentData = term.levels[level];
+      const colors = getGradientColor(level);
+
+      return (
+        <div className="px-4 sm:px-6 pb-4 animate-[fadeIn_0.35s_ease-out]">
+          <div className="text-center mb-5">
+            <div className="inline-flex items-baseline gap-2 mb-1">
+              <span className="text-2xl sm:text-3xl font-black gradient-text font-mono">{term.chinese}</span>
+              <span className="text-sm text-slate-500 font-mono">{term.pinyin}</span>
+            </div>
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">{term.category}</span>
+          </div>
+          <div className={`relative rounded-xl ${colors.bg} border-2 ${colors.border} p-6 sm:p-8 text-center shadow-xl ${colors.glow}`}>
+            <p className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-2">English Translation</p>
+            <h2 className={`text-xl sm:text-2xl md:text-3xl font-extrabold ${colors.text} leading-snug font-mono break-words`}> "{currentData.english}"</h2>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <Icon d={Icons.scale} size={16} className="text-slate-500" />
+              <span className="text-sm font-mono font-semibold text-slate-300">{currentData.strategyName}</span>
+            </div>
+            <div className="absolute top-2 left-2 w-6 h-6 border-t-2 border-l-2 border-white/10 rounded-tl-lg" />
+            <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-white/10 rounded-br-lg" />
+          </div>
+        </div>
+      );
+    }
+
+    function SidebarTheory({ term, level }) {
+      const currentData = term.levels[level];
+      return (
+        <aside className="px-4 sm:px-6 py-4 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-950/50">
+          <div className="flex items-center gap-2 mb-4">
+            <Icon d={Icons.bookOpen} size={16} className="text-violet-400" />
+            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Venuti 理论要点</h3>
+          </div>
+          <div className="space-y-2">
+            {currentData.venutiPoints.map((point, idx) => (
+              <div key={idx} className="animate-[slideIn_0.25s_ease-out_both]" style={{ animationDelay: `${idx * 60}ms`, opacity: 0, transform: 'translateX(12px)' }}
+                style={{ animation: `fadeInLeft 0.25s ease-out ${idx * 0.06}s both` }}>
+                <div className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-slate-800/80 transition-colors">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold mt-0.5 bg-violet-500/20 text-violet-300">{idx + 1}</span>
+                  <p className="text-xs leading-relaxed text-slate-400">{point}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 p-3.5 rounded-lg bg-cyan-950/20 border border-cyan-900/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon d={Icons.target} size={14} className="text-cyan-400" />
+              <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">适用语境</h4>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">{currentData.contextUsage}</p>
+          </div>
+        </aside>
+      );
+    }
+
+    function ProsConsPanel({ term, level }) {
+      const currentData = term.levels[level];
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-4 sm:px-6 py-4">
+          <div className="rounded-lg bg-emerald-950/20 border border-emerald-900/30 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icon d={Icons.trendingUp} size={16} className="text-emerald-400" />
+              <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wider">优势</h4>
+            </div>
+            <ul className="space-y-1.5">
+              {currentData.pros.map((pro, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-slate-400"><span className="text-emerald-500 mt-0.5">▸</span>{pro}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-lg bg-red-950/20 border border-red-900/30 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icon d={Icons.arrowRight} size={16} className="text-red-400 rotate-[-45deg]" />
+              <h4 className="text-xs font-bold text-red-300 uppercase tracking-wider">局限</h4>
+            </div>
+            <ul className="space-y-1.5">
+              {currentData.cons.map((con, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-slate-400"><span className="text-red-500 mt-0.5">▸</span>{con}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      );
+    }
+
+    function BottomConclusion({ term, level }) {
+      return (
+        <footer className="px-4 sm:px-6 py-5 border-t border-slate-800 bg-slate-950/80">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-lg bg-yellow-950/20 border border-yellow-900/30 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon d={Icons.lightbulb} size={16} className="text-yellow-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">教学启示</h4>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                翻译策略的选择并非二元对立，而是一个连续光谱。"{term.chinese}"的{term.levels.length}种译法展示了同一文化专有项在不同归化—异化程度下的多样可能性。教学中应引导学生根据目的语读者、文本类型和翻译目的灵活选取定位。
+              </p>
+            </div>
+            <div className="rounded-lg bg-violet-950/20 border border-violet-900/30 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon d={Icons.scale} size={16} className="text-violet-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Venuti 核心观点</h4>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Lawrence Venuti 在《译者的隐身》(1995) 中提出：归化翻译往往掩盖翻译行为，使译文读起来像原文；而异化翻译则刻意保留源语的"陌生感"，迫使读者面对文化差异。两者各有其政治性与伦理含义，译者应在具体情境中做出自觉的策略选择。
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800/50 text-center">
+            <p className="text-[10px] text-slate-600 font-mono">外国语大学翻译学院 · 翻译理论与实务课件 · Based on Venuti (1995) The Translator's Invisibility</p>
+          </div>
+        </footer>
+      );
+    }
+
+    // ─── Main App Component ──────────────────────────────────────────
+    function App() {
+      const [selectedTermId, setSelectedTermId] = useState('jianghu');
+      const [sliderLevel, setSliderLevel] = useState(2);
+
+      const currentTerm = useMemo(() => DEFAULT_TERMS.find(t => t.id === selectedTermId) || DEFAULT_TERMS[0], [selectedTermId]);
+
+      const handleTermChange = useCallback((id) => { setSelectedTermId(id); setSliderLevel(2); }, []);
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans antialiased selection:bg-violet-500/30">
+          <Toolbar selectedTermId={selectedTermId} onTermChange={handleTermChange} terms={DEFAULT_TERMS} />
+          <main className="flex flex-col lg:flex-row">
+            <section className="flex-1 min-w-0">
+              <SpectrumSlider level={sliderLevel} onLevelChange={setSliderLevel} />
+              <MainDisplay term={currentTerm} level={sliderLevel} />
+              <ProsConsPanel term={currentTerm} level={sliderLevel} />
+              <BottomConclusion term={currentTerm} level={sliderLevel} />
+            </section>
+            <div className="w-full lg:w-[380px] xl:w-[420px] flex-shrink-0">
+              <SidebarTheory term={currentTerm} level={sliderLevel} />
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    // Add CSS animations
+    const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes fadeInLeft { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+      input[type=range]::-webkit-slider-thumb { appearance: none; width: 28px; height: 28px; border-radius: 50%; cursor: grab; border: none; }
+      input[type=range]:active::-webkit-slider-thumb { cursor: grabbing; }
+    `;
+    document.head.appendChild(styleSheet);
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
